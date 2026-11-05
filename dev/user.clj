@@ -1,7 +1,12 @@
 (ns user
-  (:require [portal.api :as portal]))
+  (:require [flow-storm.api :as flow-storm]
+            [portal.api :as portal]))
 
-;; FlowStorm: evaluate :dbg at the REPL to open the debugger UI.
+(defn start-flowstorm!
+  "Opens the FlowStorm debugger UI in this JVM. Close the window to dismiss it."
+  []
+  (flow-storm/local-connect)
+  nil)
 
 (defonce ^:private portal-instance (atom nil))
 
@@ -18,3 +23,5 @@
   (when-let [instance @portal-instance]
     (portal/close instance)
     (reset! portal-instance nil)))
+
+(comment (do (start-flowstorm!) (start-portal!)))
