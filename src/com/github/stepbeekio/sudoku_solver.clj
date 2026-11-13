@@ -24,8 +24,10 @@
                                             updated (set (remove #(= digit %) current))
                                             decided (= 1 (count updated))
                                             changed (not= current updated)]
-                                        (cond (and changed decided) (set-cell m k (first updated))
-                                              :else (assoc m k updated)))
+                                        (cond
+                                          (empty? updated) (reduced nil)
+                                          (and changed decided) (set-cell m k (first updated))
+                                          :else (assoc m k updated)))
                    :else m))
                move-made
                move-made)))
@@ -36,22 +38,27 @@
 (comment (solved? {[1 1] #{3} [2 2] #{4}}))
 
 (defn possible-moves
-  "Takes in the grid as a map of [x y] to set of possible digits and returns a vector of vector choices [[[x y] a] [[x y] b]]"
+  "Takes in the grid as a map of [x y] to set of possible digits "
   [grid]
   (let [filtered (filter (fn [[_ v]] (> (count v) 1)) grid)
-        sorted (sort-by (fn [[_ v]] (count v)) filtered)]
-    (for [[k v] sorted d v] [k d])))
+        sorted (sort-by (fn [[_ v]] (count v)) filtered)
+        [c options] (first sorted)]
+    (for [d options] [c d])
+    )
+  )
 
 (defn solve
-  ([grid] (solve grid 5))
-  ([grid depth-limit]
+  [grid]
    (cond
-     (= depth-limit 0) grid
+     (nil? grid) nil
      (solved? grid) grid
-     :else (some (fn [[c d]] (solve (set-cell grid c d) (- depth-limit 1)))
-                 (possible-moves grid)))))
+     :else (some (fn [[c d]] (solve (set-cell grid c d) ))
+                 (possible-moves grid))))
 
-(comment (possible-moves {[1 1] #{1 2 3 4 5} [3 3] #{4 5 6}}))
+(comment (possible-moves {[1 1] #{1 2 3 4 5} [2 3] #{4 6} [3 3] #{4 5 6}}))
+(def t [[3 3] #{4 6 5}])
+(for [[a b] t] [a b])  
+; 
 (comment (possible-moves {[1 1] #{} [3 3] #{4 5 6}}))
 
 (defn parse-sudoku [s]
@@ -70,6 +77,13 @@
 (def example (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000"))
 
 (comment (solve example))
+
+(defn format-solution [grid]
+  (if (nil? grid) nil
+    
+  (let [sorted (sort-by key grid)
+        values (map (fn [[_ v]] (first v)) sorted)]
+    (apply str values))))
 
 ;; Test puzzles: 81-char row-major strings, 0 = blank. Each has a unique solution.
 ;; Difficulty is relative: :easy falls to naked singles alone; the rest need search.
@@ -94,4 +108,6 @@
     :difficulty :very-hard
     :puzzle     "000000012000000003002300400001800005060070800000009000008500000900040500470006000"
     :solution   "839465712146782953752391486391824675564173829287659341628537194913248567475916238"}])
+
+(comment (for [{:keys [name puzzle solution]} examples] {:name name :result (= (format-solution (solve (parse-sudoku puzzle))) solution)}))
 
