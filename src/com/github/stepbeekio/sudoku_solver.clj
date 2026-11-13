@@ -1,80 +1,100 @@
-(ns com.github.stepbeekio.sudoku-solver)
+(ns com.github.stepbeekio.sudoku-solver
+  "Depth-first search based sudoku solver for learning some clojure")
 
-(defn block [coord]
-  (map #(quot (- % 1) 3) coord))
+(def ^:private all-digits
+  (range 1 10))
+
+(defn block
+  "Normalizes a coordinate to the root of a block. E.g [1 3] becomes [1 1]."
+  [coord]
+  (map #(quot (dec %) 3) coord))
 
 (defn related?
-  "Takes in two coordinates a and b and returns true if they impact each other. Returns false if equal"
+  "Memoized function that determines whether two coordinates in a sudoku game are related. Relations are on the same row, column or in the same 3x3 square. A cell is not related to itself."
   [a b]
   (and (not= a b)
        (or (= (first a) (first b))
            (= (second a) (second b))
            (= (block a) (block b)))))
 
+(def ^:private coords
+  (for [a all-digits b all-digits] [a b]))
+
+(def coord->peers
+  "Map of coordinates to a vector of peers. Precomputed to speed up the lookups."
+  (into {} (for [c coords]
+             [c (filterv #(related? c %) coords)])))
+
+(defn- decided?
+  "A cell is decided when there's only one possible candidate solution"
+  [candidates]
+  (= 1 (count candidates)))
+
 (defn set-cell
   "Sets the cell digit on a particular coordinate. Also removes that digit from any related cells that still allow it"
   [grid coord digit]
-  (let [move-made (assoc grid coord #{digit})]
-    (reduce-kv (fn [m k _]
-                 (cond
-                   (related? coord k) (let [current (get m k)
-                                            updated (set (remove #(= digit %) current))
-                                            decided (= 1 (count updated))
-                                            changed (not= current updated)]
-                                        (cond
-                                          (empty? updated) (reduced nil)
-                                          (and changed decided) (set-cell m k (first updated))
-                                          :else (assoc m k updated)))
-                   :else m))
-               move-made
-               move-made)))
+  (let [updated-grid (assoc grid coord #{digit})
+        related-coords (coord->peers coord)]
+    (reduce (fn [m k]
+              (let [current (get m k)
+                    updated (disj current digit)]
+                (cond
+                  (empty? updated) (reduced nil)
+                  (and (not= current updated) (decided? updated)) (or  (set-cell m k (first updated)) (reduced nil))
+                  :else (assoc m k updated)))) updated-grid related-coords)))
 
 (defn solved? [grid]
-  (every? #(= 1 (count (val %))) grid))
+  (every? #(decided? %) (vals grid)))
 
-(comment (solved? {[1 1] #{3} [2 2] #{4}}))
+(defn count-related-updates
+  "Counts how many related cells will be changed as a result of this cell being set to this digit."
+  [grid coord digit]
+  (let [relations (coord->peers coord)
+        requiring-update (filter (fn [k] (contains? (get grid k) digit)) relations)]
+    (count requiring-update)))
 
 (defn possible-moves
   "Takes in the grid as a map of [x y] to set of possible digits and returns the moves
    [[[x y] d] ...] for the single most-constrained undecided cell. Empty if all cells are decided."
   [grid]
-  (let [filtered (filter (fn [[_ v]] (> (count v) 1)) grid)
-        sorted (sort-by (fn [[_ v]] (count v)) filtered)
-        [c options] (first sorted)]
-    (for [d options] [c d])))
+  (let [[c options] (->> grid
+                         (remove (comp decided? val))
+                         (sort-by (comp count val))
+                         first)]
+    (->> options
+         (sort-by #(count-related-updates grid c %))
+         (map #(vector c %)))))
 
 (defn solve
   "Returns a solved grid, or nil if there is no solution from here."
   [grid]
-  (cond
-    (nil? grid) nil
-    (solved? grid) grid
-    :else (some (fn [[c d]] (solve (set-cell grid c d)))
-                (possible-moves grid))))
+  (when grid
+    (if (solved? grid) grid
+        (some (fn [[c d]] (solve (set-cell grid c d)))
+              (possible-moves grid)))))
 
-(comment (possible-moves {[1 1] #{1 2 3 4 5} [2 3] #{4 6} [3 3] #{4 5 6}}))
-(comment (possible-moves {[1 1] #{} [3 3] #{4 5 6}}))
-
-(defn parse-sudoku [s]
-  (let [coordinates (for [x (range 1 10) y (range 1 10)]
-                      [x y])
-        grid-with-zeroes (zipmap coordinates (map #(Character/digit (char %) 10) s))
-        grid-with-possibilities (reduce-kv (fn [m k v]
-                                             (if (= v 0)
-                                               (assoc m k (set (range 1 10)))
-                                               (assoc m k #{v}))) {} grid-with-zeroes)]
-    (reduce-kv (fn [m k v] (if (= 1 (count v))
-                             (set-cell m k (first v))
+(defn parse-sudoku
+  "Parses in a flat string what represents a sudoku game. Blank square are represented by 0"
+  [s]
+  (let [grid-with-zeroes (zipmap coords (map #(Character/digit (char %) 10) s))
+        grid-with-possibilities (update-vals grid-with-zeroes (fn [d] (if (zero? d) (set all-digits) #{d})))]
+    (reduce-kv (fn [m k v] (if (decided? v)
+                             (or  (set-cell m k (first v)) (reduced nil))
                              m)) grid-with-possibilities grid-with-possibilities)))
 
-(comment (sort-by key  (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000")))
-(def example (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000"))
-
-(comment (solve example))
-
-(defn format-solution [grid]
+(defn format-solution
+  "Formates a completed solution back into the flat string format used in parsing above."
+  [grid]
   (when grid
-    (let [sorted (sort-by key grid)
-          values (map (fn [[_ v]] (first v)) sorted)]
-      (apply str values))))
+    (->> grid
+         (sort-by key)
+         (map (fn [[_ v]] (first v)))
+         (apply str))))
+
+(comment (solved? {[1 1] #{3} [2 2] #{4}}))
+(comment (possible-moves {[1 1] #{1 2 3 4 5} [2 3] #{4 6} [3 3] #{4 5 6}}))
+(comment (possible-moves {[1 1] #{} [3 3] #{4 5 6}}))
+(comment (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000"))
+(comment (sort-by key  (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000")))
+(comment (solve (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000")))
 
