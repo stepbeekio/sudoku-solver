@@ -1,8 +1,5 @@
 (ns com.github.stepbeekio.sudoku-solver)
 
-(defn empty-grid []
-  (into (sorted-map)  (for [x (range 1 10) y (range 1 10)] {[x y] (into #{} (range 1 10))})))
-
 (defn block [coord]
   (map #(quot (- % 1) 3) coord))
 
@@ -38,27 +35,24 @@
 (comment (solved? {[1 1] #{3} [2 2] #{4}}))
 
 (defn possible-moves
-  "Takes in the grid as a map of [x y] to set of possible digits "
+  "Takes in the grid as a map of [x y] to set of possible digits and returns the moves
+   [[[x y] d] ...] for the single most-constrained undecided cell. Empty if all cells are decided."
   [grid]
   (let [filtered (filter (fn [[_ v]] (> (count v) 1)) grid)
         sorted (sort-by (fn [[_ v]] (count v)) filtered)
         [c options] (first sorted)]
-    (for [d options] [c d])
-    )
-  )
+    (for [d options] [c d])))
 
 (defn solve
+  "Returns a solved grid, or nil if there is no solution from here."
   [grid]
-   (cond
-     (nil? grid) nil
-     (solved? grid) grid
-     :else (some (fn [[c d]] (solve (set-cell grid c d) ))
-                 (possible-moves grid))))
+  (cond
+    (nil? grid) nil
+    (solved? grid) grid
+    :else (some (fn [[c d]] (solve (set-cell grid c d)))
+                (possible-moves grid))))
 
 (comment (possible-moves {[1 1] #{1 2 3 4 5} [2 3] #{4 6} [3 3] #{4 5 6}}))
-(def t [[3 3] #{4 6 5}])
-(for [[a b] t] [a b])  
-; 
 (comment (possible-moves {[1 1] #{} [3 3] #{4 5 6}}))
 
 (defn parse-sudoku [s]
@@ -79,11 +73,10 @@
 (comment (solve example))
 
 (defn format-solution [grid]
-  (if (nil? grid) nil
-    
-  (let [sorted (sort-by key grid)
-        values (map (fn [[_ v]] (first v)) sorted)]
-    (apply str values))))
+  (when grid
+    (let [sorted (sort-by key grid)
+          values (map (fn [[_ v]] (first v)) sorted)]
+      (apply str values))))
 
 ;; Test puzzles: 81-char row-major strings, 0 = blank. Each has a unique solution.
 ;; Difficulty is relative: :easy falls to naked singles alone; the rest need search.
