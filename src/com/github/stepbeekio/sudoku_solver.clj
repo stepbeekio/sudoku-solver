@@ -17,16 +17,19 @@
 (defn set-cell
   "Sets the cell digit on a particular coordinate. Also removes that digit from any related cells that still allow it"
   [grid coord digit]
-  (cond
-    (= (get grid coord) #{digit}) grid
-    (= 1 (count (get grid coord))) (ex-info "Attempting to set already set grid entry" {:grid grid :coord coord :existing (get grid coord)})
-    :else (reduce-kv (fn [m k v]
-                       (cond
-                         (related? coord k) (assoc m k (set (remove #(= digit %) v)))
-                         (= coord k) (assoc m k #{digit})
-                         :else (assoc m k v)))
-                     {}
-                     grid)))
+  (let [move-made (assoc grid coord #{digit})]
+    (reduce-kv (fn [m k _]
+                 (cond
+                   (related? coord k) (let [current (get m k)
+                                            updated (set (remove #(= digit %) current))
+                                            decided (= 1 (count updated))
+                                            changed (not= current updated)]
+                                        (cond (empty? updated) (throw (ex-info "Results in an empty choice set" {:grid grid :coord coord  :digit digit :other {:coord k :existing current}}))
+                                              (and changed decided) (set-cell m k (first updated))
+                                              :else (assoc m k updated)))
+                   :else m))
+               move-made
+               move-made)))
 
 (defn solved? [grid]
   (every? #(= 1 (count (val %))) grid))
@@ -36,15 +39,18 @@
 (defn possible-moves
   "Takes in the grid as a map of [x y] to set of possible digits and returns a vector of vector choices [[[x y] a] [[x y] b]]"
   [grid]
-  (if (every? #(>= (count (val %)) 1) grid)
-    (for [[k v] grid  d v :when (> (count v) 1)] [k d])
-    []))
+  (let [filtered (filter (fn [[_ v]] (> (count v) 1)) grid)
+        sorted (sort-by (fn [[_ v]] (count v)) filtered)]
+    (for [[k v] sorted d v] [k d])))
 
-(defn solve [grid]
-  (if (solved? grid)
-    grid
-    (some (fn [[c d]] (solve (set-cell grid c d)))
-          (possible-moves grid))))
+(defn solve
+  ([grid] (solve grid 5))
+  ([grid depth-limit]
+   (cond
+     (= depth-limit 0) grid
+     (solved? grid) grid
+     :else (some (fn [[c d]] (solve (set-cell grid c d) (- depth-limit 1)))
+                 (possible-moves grid)))))
 
 (comment (possible-moves {[1 1] #{1 2 3 4 5} [3 3] #{4 5 6}}))
 (comment (possible-moves {[1 1] #{} [3 3] #{4 5 6}}))
@@ -57,11 +63,20 @@
                                              (if (= v 0)
                                                (assoc m k (set (range 1 10)))
                                                (assoc m k #{v}))) {} grid-with-zeroes)]
-    (tap> {:coordinates coordinates :grid-with-zeroes grid-with-zeroes :grid-with-possibilities grid-with-possibilities})
     (reduce-kv (fn [m k v] (if (= 1 (count v))
                              (set-cell m k (first v))
                              m)) grid-with-possibilities grid-with-possibilities)))
-(+ 1 2)
+
+;; 000260701
+;; 680070090
+;; 190004500
+;; 820100040
+;; 004602900
+;; 050003028
+;; 009300074
+;; 040050036
+;; 703018000
+
 (comment (sort-by key  (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000")))
 (def example (parse-sudoku "000260701680070090190004500820100040004602900050003028009300074040050036703018000"))
 
