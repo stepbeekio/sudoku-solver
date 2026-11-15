@@ -17,3 +17,7 @@ nrepl:
 # Start an nREPL server with the FlowStorm debugger UI open
 flowstorm:
     clojure -M:dev:nrepl:flowstorm
+
+# Runs the same command as CI
+ci:
+  nix develop --command just test
