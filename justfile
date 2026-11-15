@@ -6,6 +6,10 @@ default:
 build:
     clojure -T:build uber
 
+# Run the test suite (no ClojureStorm instrumentation)
+test:
+    clojure -M:test
+
 # Start an nREPL server for your editor (writes .nrepl-port)
 nrepl:
     clojure -M:dev:nrepl

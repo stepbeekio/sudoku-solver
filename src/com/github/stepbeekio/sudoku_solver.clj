@@ -20,6 +20,15 @@
 (def ^:private coords
   (for [a all-digits b all-digits] [a b]))
 
+(def ^:private units
+  "Each 'unit' of a sudoku like a row, column or block. Each as a sequence of 9 coordinates. 
+  e.g. [[[1 1] [1 2] ...] [[1 1] [1 2] [1 3] [2 1] [2 2] ...]]
+  "
+  (concat
+   (for [row all-digits] (for [col all-digits] [row col]))
+   (for [row all-digits] (for [col all-digits] [col row]))
+   (vals (group-by block coords))))
+
 (def coord->peers
   "Map of coordinates to a vector of peers. Precomputed to speed up the lookups."
   (into {} (for [c coords]
@@ -43,8 +52,19 @@
                   (and (not= current updated) (decided? updated)) (or  (set-cell m k (first updated)) (reduced nil))
                   :else (assoc m k updated)))) updated-grid related-coords)))
 
-(defn solved? [grid]
-  (every? #(decided? %) (vals grid)))
+(defn valid-solution?
+  "Checks whether a passed sudoku is valid. That means that for each decided cell, we checked that not related cell has the same digit left as an option"
+  [grid]
+  (every? #(= all-digits (sort (mapcat grid %))) units))
+
+(defn solved? 
+  "Checks whether a passed sudoku is solved. A sudoku is considered solved where there is exactly one possible solution for each cell,
+  and the grid overall is valid. That is that there are no digits that repeat for a row, column or block.
+  "
+  [grid]
+  (and
+   (every? decided? (vals grid))
+   (valid-solution? grid)))
 
 (defn count-related-updates
   "Counts how many related cells will be changed as a result of this cell being set to this digit."
